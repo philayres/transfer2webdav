@@ -1,0 +1,168 @@
+= RUBY/ConsectedClientApps/transfer2webdav
+Homepage:: http://www.consected.com/transfer2webdav
+Copyright:: Copyright 2010, Consected LLC, Massachusetts, USA.
+Source:: http://github.com/philayres/transfer2webdav
+
+ConsectedClientApps is a small collection of client-side applications to
+support common document and workflow functions performed in an office
+environment. This program, transfer2webdav allows a user to simply make
+transfers to a WebDAV server without requiring knowledge of WebDAV client
+software, or even any specific client to be installed. The design attempts to
+allow transfer2webdav to be used on any major platform without change.
+
+There are three modes of operation:
+
+1) Send a single file
+2) Transfer all the files in a directory
+3) Monitor a directory for transfer when new files are added
+
+What makes transfer2webdav a little different is the approach it takes to
+managing credentials, while remaining (hopefully) platform independent.
+Rather than prompting the user for WebDAV credentials for each file or when
+starting monitoring, the transfer2webdav configuration stores the credentials so
+that they can be used without further interaction by the end user. The password
+is not just stored in plain-text, and the configuration can not be used by
+another user. The configuration ties a specific user's configured credentials to
+the user logged on to the operating system, so even if another user 'borrows'
+the configuration file, the configured credentials will be useless. Obviously,
+this feature is intended to be secure, so if you spot an issue, feel free to
+raise it (politely) as an issue on GitHub (see the Source URL at the top of
+the README).
+
+
+== Examples
+
+Setup the initial configuration for the user, running the CONFIG command.
+
+ruby transferdocuments.rb CONFIG \
+  'https://aserver.net/webdav_server/folder/' \
+  'bob.builder@domain.com' 'plain-text password'
+
+After attempting to connect to the WebDAV server and testing the existence of
+the supplied subfolder path, the configuration is saved to:
+~/.transfer2webdav/user_config
+
+Note: the configuration directory and user_config file are chmod'ed to prevent 
+reading by unauthorized users.
+
+
+Monitor a directory for new files, deleting them after they are transferred:
+
+ruby transferdocuments.rb MONITOR \
+'/home/bob/Desktop/Consected Transfer' 'webdav-subfolder' &
+
+The monitor will transfer all files already existing the in the directory when
+started up, in case anything was left from a bad shutdown previously. Obviously,
+you will need to have a valid configuration in place for this to start up at
+all.
+
+Transfer a single file with:
+
+ruby transferdocuments.rb STORE \
+'/home/bob/Desktop/Consected Transfer/a-document.pdf' 'webdav-subfolder'
+
+This will return with success or failure. This works nicely for applications
+that can call a program after creating a file (some scanner apps do this).
+
+Transfer a directory full of files with:
+
+ruby transferdocuments.rb STOREDIR \
+'/home/bob/Desktop/Consected Transfer' 'webdav-subfolder' DELETE
+
+This will return with success or failure. You can leave DELETE off the end if
+you don't want the local files to be deleted after transfer. Only a single
+directory will be stored, it does not recurse. It also ignores any hidden files
+(i.e. those starting with a '.' character).
+
+
+== Discussion About Stored Credentials
+
+The design is intended to allow configuration of stored credentials to be made 
+by standard users without IT assistance, especially in environments where users 
+move between PCs regularly, or have morethan one PC that they work on. The 
+server does not need to be made aware of changes to the client PC that is being
+used to connect to it, since when processed correctly on the server the 
+credentials result in a username / password-hash that can be compared against a 
+standard user database. 
+
+For our needs, the design avoids the need for the server to manage an additional 
+public key for authentication, in addition to standard user credentials. 
+
+Taking a look at the user configuration file, we see: 
+
+{:url=>"https://aserver.net/webdav_server/subfolder/", 
+ :username=>"bob.builder@domain.com",
+ :key=>"53e9876f148fa9d3ea2be7f616cdb5d5a1b8ae8d"}
+
+(I know it should try harder with the config file...)
+
+A clientname ties this configuration to a user by doing `whoami` (or the
+Windows equivalent) and appending the hostname of the client machine.
+
+The key is a hash of the username, clientname and plain-text password. The
+clientname is not stored in the configuration file, since this should be
+generated at the time of authentication. This prevents carelessly backed up
+files from identifying themselves quite so easily if stolen.
+
+At a minimum, this means that for the credential configuration to be stolen, the
+attacker will need to know the login id, client hostname and get the config file
+to use the credentials. All are possible in an insecure environment, but in that
+case an RSA private key would be equally vulnerable.
+
+To handle authentication, the ConsectedDav class prepares credentials for the 
+login to the WebDAV server that follow this scheme:
+
+userid = 'storedcredentials//' + config.clientname + '/' + config.username + '/'
+password = config.key
+
+We could therefore create a user in our system with this userid and password,
+but that's not very secure, since the key becomes the equivalent of a plain-text 
+password stored on the client. Our WebDAV server authentication goes a step 
+further and does _something_ like this:
+
+if userid[0..18] == 'storedcredentials//'
+  username = userid[19..-1].split('/')[1]
+  user = UserProfile.find_by_username(username)
+  return user if Digest::SHA1.hexdigest(userid + user.userPassword) == key       
+  return false
+else
+    # Do a standard username and password login
+end
+
+This allows us to maintain a standard authentication model.
+
+== Installation
+
+Installation varies by platform (due to the way different operating systems
+handle directory change notification).
+
+Windows:
+Install Ruby and Gems using the installation script on the installation media
+gem install win32-changenotify win32-event em-dir-watcher net_dav eventmachine
+
+Linux:
+sudo apt-get install ruby ruby-gems
+sudo gem install rb-inotify em-dir-watcher net_dav eventmachine
+
+Mac:
+Install Ruby and Gems
+sudo gem install em-dir-watcher net_dav eventmachine
+
+
+    
+== License
+
+    This file is part of transfer2webdav.
+
+    transfer2webdav is free software: you can redistribute it and/or modify
+    it under the terms of the GNU Lesser General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    transfer2webdav is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU Lesser General Public License for more details.
+
+    You should have received a copy of the GNU Lesser General Public License
+    along with transfer2webdav.  If not, see <http://www.gnu.org/licenses/>.
