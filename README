@@ -1,4 +1,6 @@
-= RUBY/ConsectedClientApps/transfer2webdav
+RUBY/ConsectedClientApps/transfer2webdav
+========================================
+
 Homepage:: http://www.consected.com/transfer2webdav
 Copyright:: Copyright 2010, Consected LLC, Massachusetts, USA.
 Source:: http://github.com/philayres/transfer2webdav
@@ -30,13 +32,19 @@ raise it (politely) as an issue on GitHub (see the Source URL at the top of
 the README).
 
 
-== Examples
+Examples
+--------
 
-Setup the initial configuration for the user, running the CONFIG command.
+Setup the initial configuration for the user, running the CONFIG command, in the
+form:
 
-ruby transferdocuments.rb CONFIG \
+transferdocuments.rb CONFIG 'configuration_name' 'url' 'username' 'password'
+
+e.g.
+
+ruby transferdocuments.rb CONFIG 'my_config'\
   'https://aserver.net/webdav_server/folder/' \
-  'bob.builder@domain.com' 'plain-text password'
+  'bob.builder@domain.com' 'plain-text pa$$word'
 
 After attempting to connect to the WebDAV server and testing the existence of
 the supplied subfolder path, the configuration is saved to:
@@ -48,6 +56,10 @@ reading by unauthorized users.
 
 Monitor a directory for new files, deleting them after they are transferred:
 
+transferdocuments.rb MONITOR 'configuration_name' 'localdirectory' \
+  {'webdavsubfolder'}
+
+e.g.
 ruby transferdocuments.rb MONITOR \
 '/home/bob/Desktop/Consected Transfer' 'webdav-subfolder' &
 
@@ -57,7 +69,9 @@ you will need to have a valid configuration in place for this to start up at
 all.
 
 Transfer a single file with:
+transferdocuments.rb STORE 'configuration_name' 'filename' {'subfolder'}
 
+e.g.
 ruby transferdocuments.rb STORE \
 '/home/bob/Desktop/Consected Transfer/a-document.pdf' 'webdav-subfolder'
 
@@ -65,7 +79,10 @@ This will return with success or failure. This works nicely for applications
 that can call a program after creating a file (some scanner apps do this).
 
 Transfer a directory full of files with:
+transferdocuments.rb STOREDIR 'configuration_name' 'localdirectory' \
+  'webdavsubfolder' {DELETE}
 
+e.g.
 ruby transferdocuments.rb STOREDIR \
 '/home/bob/Desktop/Consected Transfer' 'webdav-subfolder' DELETE
 
@@ -74,8 +91,57 @@ you don't want the local files to be deleted after transfer. Only a single
 directory will be stored, it does not recurse. It also ignores any hidden files
 (i.e. those starting with a '.' character).
 
+Monitoring a Directory as Files Change
+--------------------------------------
 
-== Discussion About Stored Credentials
+The reason for the MONITOR option is the need to transfer files that can appear
+at any time from a range of different applications. This gives us no control
+over how the application stores its data. Use cases that transfer2webdav tries
+to address are:
+
+1) Files moved from another directory
+2) Files saved directly to disk by an application
+3) Files copied from another location(for example Explorer, Nautilus)
+
+The first item, 'move', is easy to address, since it is an atomic action that
+triggers the notification of the new file. The file is complete the moment it
+appears in the monitored directory.
+
+A test document scanning program revealed that just looking for a new file was
+insufficient. The program (gscan2pdf) writes out all the scanned pages of a
+document to a PDF, and is relatively slow at doing so. The file it writes to is
+opened on the disk, and appears to MONITOR as a new file of zero size.
+Fortunately, when gscan2pdf is finally complete, the data gets written to disk
+pretty rapidly. This appears to MONITOR as another file notification. This makes
+it easy to just ignore zero sized files, in the expectation that they will
+eventually grow into real files that force a new notification.
+
+Surprisingly, #3 is the hardest, and probably applies to many application.
+When copying from local disk, the action is often fast enough to complete within
+the directory monitoring grace period . But if you copy a large file from the
+network, or from another WebDAV server, you will see the file gradually growing.
+MONITOR receives a notification for every chunk of data that hits the disk,
+making things tricky, since you can't move the file just because it suddenly
+exists and is larger than zero bytes. MONITOR takes the approach that, as soon
+as a file exists with some size, it needs to wait for the file to stop growing.
+It basically goes into a loop for the file, polling it every few seconds to see
+if it has grown since the last check. If it has stayed a stable size, the
+transfer is allowed to proceed. If the file size has changed, the transfer is
+delayed for another waiting cycle, to see if next time it stops changing.
+
+MONITOR does attempt to play nicely, therefore every file is delayed by a few
+seconds to check it is a consistent size, but in doing so, the who MONITORing
+cycle is not held up. Rather than using sleep, MONITOR implements the
+eventmachine periodic time to manage the polling of a single file. This allows
+monitoring to continue, and multiple newly arrived files to get queued up for
+simultaneous checking and subsequent transfer. If we used 'sleep', throughput
+would be limited to the poll time for checking file sizes, since every action
+would queue up synchronously behind the poll. At least this allows multiple
+polls to be waiting simultaneously.
+
+
+Discussion About Stored Credentials
+-----------------------------------
 
 The design is intended to allow configuration of stored credentials to be made 
 by standard users without IT assistance, especially in environments where users 
@@ -112,7 +178,7 @@ case an RSA private key would be equally vulnerable.
 To handle authentication, the ConsectedDav class prepares credentials for the 
 login to the WebDAV server that follow this scheme:
 
-userid = 'storedcredentials//' + config.clientname + '/' + config.username + '/'
+userid = 'storedcredentials//' + current_clientname + '/' + config.username + '/'
 password = config.key
 
 We could therefore create a user in our system with this userid and password,
@@ -131,7 +197,8 @@ end
 
 This allows us to maintain a standard authentication model.
 
-== Installation
+Installation
+------------
 
 Installation varies by platform (due to the way different operating systems
 handle directory change notification).
@@ -150,7 +217,8 @@ sudo gem install em-dir-watcher net_dav eventmachine
 
 
     
-== License
+License
+-------
 
     This file is part of transfer2webdav.
 

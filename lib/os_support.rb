@@ -22,6 +22,7 @@ class OsSupport
   require 'eventmachine'
   require 'em-dir-watcher'
 
+  @notified_files = []
 
   def self.is_windows?
     RUBY_PLATFORM =~ /(win|w)32$/
@@ -35,21 +36,43 @@ class OsSupport
   def self.watch_dir_for_changes dirpath, dav
 
     if !File.exist?(dirpath) || !File.directory?(dirpath)
-      return :directory_not_found
+      begin 
+        FileUtils.mkdir_p(dirpath)
+      rescue
+        return :directory_not_found
+      end
     end
     dav.delete = true
 
     return :error_starting_up if dav.transfer_directory(dirpath)!=true
 
     EM.run {
-    dw = EMDirWatcher.watch dirpath, :grace_period => 5.0 do |paths|
+    dw = EMDirWatcher.watch dirpath, :grace_period => 1.0 do |paths|
         paths.each do |path|
             fullpath = dirpath + '/'+ path
-            if File.exist?(fullpath)
-                puts "New file: #{path}"
-                dav.transfer_directory dirpath
+            #puts "Received a file event #{path}. Notified files still being processed: #{@notified_files.length}"
+            if File.exist?(fullpath) && File.size(fullpath) != 0 && !@notified_files.include?(fullpath)
+              @notified_files << fullpath
+              puts "New file. Wait for new file to stop growing: #{path}"
+              file_size = 0
+              timer = EventMachine::add_periodic_timer( 5 ) {
+                puts "Waiting for new file to stop growing (#{file_size} bytes): #{path}"
+                
+                if file_size>0 && file_size == File.size(fullpath)
+                  # okay - stopped growing
+                  timer.cancel  
+                  puts "New file (#{file_size}): #{path}"
+                  dav.store_file fullpath
+                  FileUtils.rm(fullpath)
+                  @notified_files.delete_at(@notified_files.index(fullpath))
+                else
+                  file_size = File.size(fullpath) 
+                end
+
+              }
+
             else
-                puts "Deleted: #{path}"
+              #puts "Ignoring file notification: #{fullpath} "
             end
         end
     end

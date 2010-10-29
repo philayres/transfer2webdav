@@ -19,65 +19,93 @@ class ConfigHandler
 
   require File.dirname(__FILE__) + '/os_support'
 
-  attr_accessor :url, :username, :clientname, :key, :hash_token
+  attr_accessor :url, :username, :clientname, :key, :hash_token, :config_name
 
+  @configured = false
 
   @config = {}
+  
 
-  def self.config_exists?
-    File.exist?(config_file)
-  end
+#  def self.config_exists? config_name
+#    @config_name = config_name
+#    File.exist?(config_file)
+#  end
 
-  def initialize
-    return nil unless File.exist?(ConfigHandler.config_file)
-		config_file_txt = File.open(ConfigHandler.config_file, "r").read {}
-		@config = eval(config_file_txt)
+  def initialize config_name
+    @configured = false
+    self.config_name = config_name
 
-    self.url = @config[:url]
-    self.username = @config[:username]
-    self.clientname = clientname
-    self.key = @config[:key]
-    self.hash_token = @config[:hash_token]
+    puts "Loading configuration with name #{config_name}"
+    puts "Loading configuration from file '#{config_file}'"
+
+    unless File.exist?(config_file)      
+      puts "Configuration File not found"
+      return nil
+    end
     
+		config_file_txt = File.open(config_file, "r").read {}
+
+    begin
+      @config = eval(config_file_txt)
+
+      self.url = @config[:url]
+      self.username = @config[:username]
+      self.clientname = clientname
+      self.key = @config[:key]
+      self.hash_token = @config[:hash_token]
+
+      puts "The configuration manages the URL: #{self.url}"
+    rescue
+      puts "The configuration named #{config_name} is invalid. Run CONFIG again to correct."
+      return nil
+    end
+    @configured = true
+    puts "Configured URL is #{self.url}"
   end
 
-  def self.setup_config args
+  def self.setup_config config_name, url, username, plaintext_password
     config = {
-      :url => args[1].chomp,
-      :username => args[2].chomp,
+      :url => url,
+      :username => username,
       :key => "",
       :hash_token => ""
     }
 
+    puts "CONFIG setup for configuration named: #{config_name}"
+    
     dav = Net::DAV.new(config[:url], :curl => false)
     dav.verify_server = false
-    dav.credentials(config[:username], args[3].chomp)
-    return :could_not_connect if !dav.exists?('.')
+    dav.credentials(config[:username], plaintext_password)
+    return nil if !dav.exists?('.')
 
-    hash_pw = Digest::SHA1.hexdigest(args[3].chomp)
+    hash_pw = Digest::SHA1.hexdigest(plaintext_password)
     config[:hash_token] = hash_pw
 
-    puts "Generated user URI:" + user_uri(config[:username])
+    puts "CONFIG generated user URI:" + user_uri(config[:username])
     config[:key] = Digest::SHA1.hexdigest(user_uri(config[:username]) + hash_pw)
 
     unless File.exist?(config_directory)
-      FileUtils.mkdir(config_directory)
+      FileUtils.mkdir_p(config_directory)
       FileUtils.chmod(0700, config_directory)
     end
 
-    config_file_txt = File.open(config_file, "w") {|f| f.write(config.inspect) }
-    FileUtils.chmod(0600, config_file)
+    File.open(config_file(config_name), "w") {|f| f.write(config.inspect) }
+    FileUtils.chmod(0600, config_file(config_name))
 
-    return ConfigHandler.new
+    return ConfigHandler.new(config_name)
     
   end
 
-  def self.config_file
-    config_directory + "/user_config"
+  def self.config_file config_name
+    config_directory + "/#{config_name}_config"
+  end
+
+  def config_file
+    ConfigHandler.config_file config_name
   end
 
   def self.config_directory
-    OsSupport.home_directory + "/.transfer2webdav"
+    OsSupport.home_directory + "/.consected_client_apps/transfer2webdav"
   end
 
   def self.clientname
@@ -89,7 +117,11 @@ class ConfigHandler
   end
 
   def user_uri
-    ConfigHandler.user_uri self.username
+    ConfigHandler.user_uri(self.username)
+  end
+
+  def configured?
+    @configured
   end
   
 end

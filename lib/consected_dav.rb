@@ -39,6 +39,7 @@ class ConsectedDav
     lines = File.open(path).read {}
     @dav.put_string(URI.escape(File.basename(path)), lines)
    	return :file_not_found if !File.exist?(path)
+    puts "Stored file #{path}"
     return true
     
   end
