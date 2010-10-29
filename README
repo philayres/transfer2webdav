@@ -26,17 +26,17 @@ that they can be used without further interaction by the end user. The password
 is not just stored in plain-text, and the configuration can not be used by
 another user. The configuration ties a specific user's configured credentials to
 the user logged on to the operating system, so even if another user 'borrows'
-the configuration file, the configured credentials will be useless. Obviously,
-this feature is intended to be secure, so if you spot an issue, feel free to
-raise it (politely) as an issue on GitHub (see the Source URL at the top of
-the README).
+the configuration file, the configured credentials will be useless. A user can 
+set up multiple configurations to run transfers simultaneously to different
+servers or remote directories if required.
 
 
 Examples
 --------
 
-Setup the initial configuration for the user, running the CONFIG command, in the
-form:
+CONFIG
+
+Setup a configuration for the user, running the CONFIG command, in the form:
 
 transferdocuments.rb CONFIG 'configuration_name' 'url' 'username' 'password'
 
@@ -48,11 +48,13 @@ ruby transferdocuments.rb CONFIG 'my_config'\
 
 After attempting to connect to the WebDAV server and testing the existence of
 the supplied subfolder path, the configuration is saved to:
-~/.transfer2webdav/user_config
+~/.consected_client_apps/transfer2webdav/{configuration_name}_config
 
 Note: the configuration directory and user_config file are chmod'ed to prevent 
 reading by unauthorized users.
 
+
+MONITOR
 
 Monitor a directory for new files, deleting them after they are transferred:
 
@@ -60,7 +62,7 @@ transferdocuments.rb MONITOR 'configuration_name' 'localdirectory' \
   {'webdavsubfolder'}
 
 e.g.
-ruby transferdocuments.rb MONITOR \
+ruby transferdocuments.rb MONITOR 'my_config'\
 '/home/bob/Desktop/Consected Transfer' 'webdav-subfolder' &
 
 The monitor will transfer all files already existing the in the directory when
@@ -68,22 +70,28 @@ started up, in case anything was left from a bad shutdown previously. Obviously,
 you will need to have a valid configuration in place for this to start up at
 all.
 
+
+STORE
+
 Transfer a single file with:
 transferdocuments.rb STORE 'configuration_name' 'filename' {'subfolder'}
 
 e.g.
-ruby transferdocuments.rb STORE \
+ruby transferdocuments.rb STORE 'my_config'\
 '/home/bob/Desktop/Consected Transfer/a-document.pdf' 'webdav-subfolder'
 
 This will return with success or failure. This works nicely for applications
 that can call a program after creating a file (some scanner apps do this).
+
+
+STOREDIR
 
 Transfer a directory full of files with:
 transferdocuments.rb STOREDIR 'configuration_name' 'localdirectory' \
   'webdavsubfolder' {DELETE}
 
 e.g.
-ruby transferdocuments.rb STOREDIR \
+ruby transferdocuments.rb STOREDIR 'my_config'\
 '/home/bob/Desktop/Consected Transfer' 'webdav-subfolder' DELETE
 
 This will return with success or failure. You can leave DELETE off the end if
